@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "KandaPay",
+    "slug": "kandapay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.kandapay",
+      "permissions": [
+        "CALL_PHONE",
+        "READ_PHONE_STATE",
+        "READ_PHONE_NUMBERS"
+      ],
+      "minSdkVersion": 26
+    },
+    "plugins": [
+      [
+        "react-native-permissions",
+        {
+          "androidPermissions": [
+            "CALL_PHONE",
+            "READ_PHONE_STATE",
+            "READ_PHONE_NUMBERS"
+          ]
+        }
+      ]
+    ]
+  }
+}
