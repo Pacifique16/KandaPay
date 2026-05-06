@@ -6,22 +6,19 @@ import { checkBalance } from '../../services/ussdService';
 
 export default function BalanceScreen() {
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState('');
   const { selectedSlot, detectedOperator } = useSelector((s: RootState) => s.sim);
 
   const handleCheck = async () => {
     if (detectedOperator === 'UNKNOWN') return;
     setLoading(true);
-    const result = await checkBalance(detectedOperator, selectedSlot);
+    await checkBalance(detectedOperator, selectedSlot);
     setLoading(false);
-    setResponse(result.response ?? result.error ?? 'No response');
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Check Balance</Text>
       <Text style={styles.operator}>{detectedOperator} Mobile Money</Text>
-      {!!response && <View style={styles.responseBox}><Text style={styles.responseText}>{response}</Text></View>}
       <TouchableOpacity style={styles.btn} onPress={handleCheck} disabled={loading}>
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Check Balance</Text>}
       </TouchableOpacity>
