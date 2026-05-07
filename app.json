@@ -3,10 +3,16 @@
     "name": "KandaPay",
     "slug": "kandapay",
     "version": "1.0.0",
+    "scheme": "kandapay",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1A237E",
+      "resizeMode": "contain"
+    },
     "android": {
       "package": "com.kandapay",
+      "backgroundColor": "#F5F7FB",
       "permissions": [
         "CALL_PHONE",
         "READ_PHONE_STATE",
@@ -15,16 +21,23 @@
       "minSdkVersion": 26
     },
     "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-contacts",
       [
         "react-native-permissions",
         {
           "androidPermissions": [
             "CALL_PHONE",
             "READ_PHONE_STATE",
-            "READ_PHONE_NUMBERS"
+            "READ_PHONE_NUMBERS",
+            "READ_CONTACTS"
           ]
         }
       ]
-    ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }
