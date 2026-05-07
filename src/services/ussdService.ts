@@ -14,8 +14,19 @@ export async function executeTransaction(payload: {
   return dialUssd(ussdCode, simSlot);
 }
 
-export const sendMoney = (phone: string, amount: string, simSlot = 0) =>
-  executeTransaction({ action: 'send_money', operator: detectOperatorFromPhone(phone), simSlot, params: { phone, amount } });
+function normalizePhone(phone: string): string {
+  // Remove all non-digit characters except leading +
+  let cleaned = phone.replace(/[\s\-().]/g, '').replace(/[^0-9+]/g, '');
+  // Remove +250 or 250 country code and replace with 0
+  if (cleaned.startsWith('+250')) cleaned = '0' + cleaned.slice(4);
+  else if (cleaned.startsWith('250')) cleaned = '0' + cleaned.slice(3);
+  return cleaned;
+}
+
+export const sendMoney = (phone: string, amount: string, simSlot = 0) => {
+  const normalized = normalizePhone(phone);
+  return executeTransaction({ action: 'send_money', operator: detectOperatorFromPhone(normalized), simSlot, params: { phone: normalized, amount } });
+};
 
 export const checkBalance = (operator: Operator, simSlot = 0) =>
   executeTransaction({ action: 'check_balance', operator, simSlot });
