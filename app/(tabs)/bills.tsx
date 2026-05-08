@@ -11,13 +11,13 @@ const TAB_BAR_HEIGHT = 100;
 type Biller = { id: string; label: string; icon: string; color: string; route: "tap-and-go" | "bill-payment"; type?: string };
 
 const BILLERS: Biller[] = [
-  { id: "electricity", label: "Electricity", icon: "flash", color: "#1A237E", route: "bill-payment", type: "electricity" },
+  { id: "electricity", label: "Electricity", icon: "bulb", color: "#1A237E", route: "bill-payment", type: "electricity" },
   { id: "startimes", label: "Startimes", icon: "tv", color: "#1A237E", route: "bill-payment", type: "startimes" },
-  { id: "dstv", label: "DSTV", icon: "wifi", color: "#1A237E", route: "bill-payment", type: "dstv" },
-  { id: "water", label: "Water", icon: "water", color: "#1A237E", route: "bill-payment", type: "water" },
+  { id: "dstv", label: "DSTV", icon: "radio", color: "#1A237E", route: "bill-payment", type: "dstv" },
+  { id: "water", label: "Water", icon: "water-outline", color: "#1A237E", route: "bill-payment", type: "water" },
   { id: "tapgo", label: "Tap & Go", icon: "bus", color: "#1A237E", route: "tap-and-go" },
   { id: "irembo", label: "IREMBO", icon: "globe-outline", color: "#1A237E", route: "bill-payment", type: "irembo" },
-  { id: "canalplus", label: "Canal Plus", icon: "play-circle", color: "#1A237E", route: "bill-payment", type: "canal-plus" },
+  { id: "canalplus", label: "Canal Plus", icon: "tv", color: "#1A237E", route: "bill-payment", type: "canal-plus" },
   { id: "school", label: "School Fees", icon: "school", color: "#1A237E", route: "bill-payment", type: "school-fees" },
 ];
 
@@ -30,7 +30,7 @@ function BillerCard({ biller }: { biller: Biller }) {
   };
   return (
     <Pressable onPress={handlePress} style={({ pressed }) => [styles.card, { backgroundColor: colors.card, opacity: pressed ? 0.75 : 1 }]}>
-      <View style={[styles.iconWrap, { backgroundColor: biller.color + "18" }]}>
+      <View style={[styles.iconWrap, { backgroundColor: "transparent" }]}>
         <Ionicons name={biller.icon as any} size={28} color={biller.color} />
       </View>
       <Text style={[styles.cardLabel, { color: colors.foreground }]} numberOfLines={2}>{biller.label}</Text>
@@ -81,7 +81,7 @@ export default function PayBillsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 16 },
-  title: { fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
+  title: { fontSize: 22, fontWeight: "800", letterSpacing: -0.5 },
   subtitle: { fontSize: 14, marginTop: 3 },
   searchWrap: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11, gap: 10, marginBottom: 16, borderWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   searchInput: { flex: 1, fontSize: 14, padding: 0 },

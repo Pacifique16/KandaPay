@@ -29,6 +29,8 @@ function RootLayoutNav({ onboardingDone }: { onboardingDone: boolean }) {
       <Stack.Screen name="airtime-picker" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="tap-and-go" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="bill-payment" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="tapgo-topup" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="tapgo-pay" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
 }
