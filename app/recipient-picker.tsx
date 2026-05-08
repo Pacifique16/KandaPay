@@ -7,9 +7,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Linking,
-  Platform,
+  Modal,
   Pressable,
   ScrollView,
   SectionList,
@@ -18,7 +19,24 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { check, request, PERMISSIONS, RESULTS } from "react-native-permissions";
+import { Platform } from "react-native";
+
+const isAndroid = Platform.OS === 'android';
+
+// Safe permissions - only import on Android to avoid iOS crash in Expo Go
+let check: any, request: any, PERMISSIONS: any, RESULTS: any;
+if (isAndroid) {
+  const perms = require('react-native-permissions');
+  check = perms.check;
+  request = perms.request;
+  PERMISSIONS = perms.PERMISSIONS;
+  RESULTS = perms.RESULTS;
+} else {
+  RESULTS = { GRANTED: 'granted', DENIED: 'denied' };
+  PERMISSIONS = { ANDROID: { READ_CONTACTS: '' } };
+  check = async () => RESULTS.GRANTED;
+  request = async () => RESULTS.GRANTED;
+}
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import { useColors } from "@/hooks/useColors";
@@ -71,7 +89,21 @@ function Avatar({ name, color, size = 48, imageUri, isUnknown }: { name: string;
   );
 }
 
-const ContactRow = React.memo(function ContactRow({ item, onPress, colors }: { item: PhoneContact; onPress: () => void; colors: any }) {
+function HighlightText({ text, query, style }: { text: string; query: string; style: any }) {
+  if (!query) return <Text style={style}>{text}</Text>;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return (
+    <Text style={style}>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <Text key={i} style={[style, { color: '#00C9A7', fontWeight: '700' }]}>{part}</Text>
+          : <Text key={i}>{part}</Text>
+      )}
+    </Text>
+  );
+}
+
+const ContactRow = React.memo(function ContactRow({ item, onPress, colors, query }: { item: PhoneContact; onPress: () => void; colors: any; query: string }) {
   // A contact is unknown if its name looks like a phone number or matches the phone field
   const isUnknown = item.name === item.phone || /^[\d\s\+\-\(\)]+$/.test(item.name);
   const isMerchantCode = /^\d{4,8}$/.test(item.phone.replace(/[\s\-]/g, '')) && !/^(\+?250)?0(7[2389]\d{7})$/.test(item.phone.replace(/[\s\-]/g, ''));
@@ -82,8 +114,12 @@ const ContactRow = React.memo(function ContactRow({ item, onPress, colors }: { i
     >
       <Avatar name={item.initials} color={item.color} size={48} imageUri={item.imageUri} isUnknown={isUnknown || isMerchantCode} />
       <View style={styles.rowInfo}>
-        <Text style={[styles.rowName, { color: colors.foreground }]}>{isUnknown ? item.phone : item.name}</Text>
-        {!isUnknown && !isMerchantCode && <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{item.phone}</Text>}
+        <HighlightText text={isUnknown ? item.phone : item.name} query={query} style={[styles.rowName, { color: colors.foreground }]} />
+        {!isUnknown && !isMerchantCode && (
+          <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>
+            {item.phones && item.phones.length > 1 ? `${item.phones.length} phone numbers` : item.phone}
+          </Text>
+        )}
         {isMerchantCode && <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{item.phone}</Text>}
       </View>
       <Ionicons name="chevron-forward" size={16} color={colors.border} />
@@ -91,16 +127,149 @@ const ContactRow = React.memo(function ContactRow({ item, onPress, colors }: { i
   );
 });
 
-function MerchantCard({ merchant, onPress }: { merchant: NearbyMerchantResult; onPress: () => void }) {
+const AnimatedContactRow = React.memo(function AnimatedContactRow({ item, onPress, colors, query, index }: { item: PhoneContact; onPress: () => void; colors: any; query: string; index: number }) {
+  const translateY = React.useRef(new Animated.Value(40)).current;
+  const opacity = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    translateY.setValue(40);
+    opacity.setValue(0);
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 250,
+        delay: index * 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 250,
+        delay: index * 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [query]);
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.merchantCard, pressed && { opacity: 0.75 }]}>
-      <LinearGradient colors={["#1A237E", "#6C63FF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.merchantCardGradient}>
-        <Text style={styles.merchantCardName} numberOfLines={2}>{merchant.merchant_name}</Text>
-        <Text style={styles.merchantCodeText}>{merchant.merchant_code}</Text>
-      </LinearGradient>
-    </Pressable>
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      <ContactRow item={item} onPress={onPress} colors={colors} query={query} />
+    </Animated.View>
+  );
+});
+
+function MerchantCard({ merchant, onPress, index }: { merchant: NearbyMerchantResult; onPress: () => void; index: number }) {
+  const translateX = React.useRef(new Animated.Value(80)).current;
+  const opacity = React.useRef(new Animated.Value(0)).current;
+  const codeCount = merchant.all_codes?.length ?? 1;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(translateX, { toValue: 0, duration: 300, delay: index * 60, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 60, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateX }] }}>
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.merchantCard, pressed && { opacity: 0.75 }]}>
+        <LinearGradient colors={["#1A237E", "#6C63FF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.merchantCardGradient}>
+          <Text style={styles.merchantCardName} numberOfLines={2}>{merchant.merchant_name}</Text>
+          <Text style={styles.merchantCodeText}>
+            {codeCount > 1 ? `${codeCount} codes` : merchant.merchant_code}
+          </Text>
+        </LinearGradient>
+      </Pressable>
+    </Animated.View>
   );
 }
+
+function detectCarrier(phone: string): { name: string; flag: string; supported: boolean } {
+  const cleaned = phone.replace(/\D/g, '');
+  const local = cleaned.startsWith('250') ? '0' + cleaned.slice(3) : cleaned.startsWith('+250') ? '0' + cleaned.slice(4) : cleaned;
+  if (/^07[89]/.test(local)) return { name: 'MTN Rwanda', flag: '🇷🇼', supported: true };
+  if (/^07[23]/.test(local)) return { name: 'Airtel Rwanda', flag: '🇷🇼', supported: true };
+  return { name: 'Unknown carrier', flag: '🌍', supported: false };
+}
+
+function PhonePickerModal({ visible, contact, onSelect, onClose, colors }: {
+  visible: boolean;
+  contact: PhoneContact | null;
+  onSelect: (phone: string) => void;
+  onClose: () => void;
+  colors: any;
+}) {
+  const [showAll, setShowAll] = React.useState(false);
+  const phones = contact?.phones ?? (contact ? [contact.phone] : []);
+  const rwandaPhones = phones.filter(p => detectCarrier(p).supported);
+  const otherPhones = phones.filter(p => !detectCarrier(p).supported);
+  const displayPhones = showAll ? phones : rwandaPhones;
+
+  React.useEffect(() => { if (visible) setShowAll(false); }, [visible]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={pmStyles.overlay}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={[pmStyles.sheet, { backgroundColor: colors.card }]}>
+          <Text style={[pmStyles.title, { color: colors.foreground }]}>
+            Select a phone number for {contact?.name}
+          </Text>
+          <Text style={[pmStyles.subtitle, { color: colors.mutedForeground }]}>
+            This will help us send the money to the correct number
+          </Text>
+          {displayPhones.map((phone, i) => {
+            const carrier = detectCarrier(phone);
+            return (
+              <Pressable
+                key={i}
+                onPress={() => {
+                  if (!carrier.supported) {
+                    Alert.alert('Not Supported', 'The phone number you selected is not supported. Please select an MTN or Airtel Rwanda number.');
+                    return;
+                  }
+                  onSelect(phone);
+                }}
+                style={({ pressed }) => [pmStyles.phoneRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1, backgroundColor: carrier.supported ? colors.background : colors.muted }]}
+              >
+                <Text style={pmStyles.flag}>{carrier.flag}</Text>
+                <View style={pmStyles.phoneInfo}>
+                  <Text style={[pmStyles.phoneNum, { color: carrier.supported ? colors.foreground : colors.mutedForeground }]}>{phone}</Text>
+                  <Text style={[pmStyles.carrierName, { color: carrier.supported ? colors.accent : colors.mutedForeground }]}>{carrier.name}</Text>
+                </View>
+                {!carrier.supported && <Ionicons name="ban" size={16} color={colors.mutedForeground} />}
+                {carrier.supported && <Ionicons name="chevron-forward" size={16} color={colors.border} />}
+              </Pressable>
+            );
+          })}
+          {otherPhones.length > 0 && !showAll && (
+            <Pressable onPress={() => setShowAll(true)} style={pmStyles.showAllBtn}>
+              <Text style={[pmStyles.showAllText, { color: colors.primary }]}>Show all numbers ({phones.length}) ›</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={onClose} style={[pmStyles.cancelBtn, { borderColor: colors.border }]}>
+            <Text style={[pmStyles.cancelText, { color: colors.destructive }]}>Cancel</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const pmStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 12, paddingBottom: 40 },
+  title: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  subtitle: { fontSize: 13, textAlign: 'center', marginBottom: 4 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14, borderWidth: 1, gap: 12 },
+  flag: { fontSize: 24 },
+  phoneInfo: { flex: 1 },
+  phoneNum: { fontSize: 15, fontWeight: '600' },
+  carrierName: { fontSize: 12, marginTop: 2 },
+  showAllBtn: { alignItems: 'center', paddingVertical: 8 },
+  showAllText: { fontSize: 14, fontWeight: '600' },
+  cancelBtn: { borderWidth: 1, borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 4 },
+  cancelText: { fontSize: 15, fontWeight: '700' },
+});
 
 export default function RecipientPickerScreen() {
   const colors = useColors();
@@ -114,6 +283,8 @@ export default function RecipientPickerScreen() {
   const [contacts, setContacts] = useState<PhoneContact[]>(() => getContactsSync());
   const [loading, setLoading] = useState(() => !isContactsLoaded());
   const [nearbyMerchants, setNearbyMerchants] = useState<NearbyMerchantResult[]>(() => getNearbyMerchantsSync());
+  const [pickerContact, setPickerContact] = useState<PhoneContact | null>(null);
+  const [pickerMerchant, setPickerMerchant] = useState<NearbyMerchantResult | null>(null);
 
   // Sync nearby merchants when cache loads
   useEffect(() => {
@@ -127,11 +298,22 @@ export default function RecipientPickerScreen() {
     }, 1500);
     return () => clearTimeout(t);
   }, []);
+  // Sync contacts state when background refresh updates the cache
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const fresh = getContactsSync();
+      if (fresh.length > 0 && fresh.length !== contacts.length) {
+        setContacts(fresh);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [contacts.length]);
+
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   useEffect(() => {
-    // If preloader already loaded contacts, use them immediately
+    // Always sync from cache on open
     const synced = getContactsSync();
     if (synced.length > 0) {
       setContacts(synced);
@@ -142,8 +324,8 @@ export default function RecipientPickerScreen() {
     (async () => {
       try {
         const permission = PERMISSIONS.ANDROID.READ_CONTACTS;
-        let status = await check(permission);
-        if (status === RESULTS.DENIED) status = await request(permission);
+        let status = isAndroid ? await check(permission) : RESULTS.GRANTED;
+        if (isAndroid && status === RESULTS.DENIED) status = await request(permission);
         if (status !== RESULTS.GRANTED) {
           setLoading(false);
           Alert.alert(
@@ -166,17 +348,16 @@ export default function RecipientPickerScreen() {
           const name = (c.name ?? "").trim();
           if (!name || name.length < 2) return;
           if (/^[\d\s\+\-\(\)]+$/.test(name)) return;
-          const phones = c.phoneNumbers ?? [];
+          const phones = (c.phoneNumbers ?? []).map(p => p.number ?? '').filter(Boolean);
           if (phones.length === 0) return;
-          const phone = phones[0].number;
-          if (!phone) return;
-          const key = `${name}-${phone.replace(/\D/g, "")}`;
+          const key = `${name}-${phones[0].replace(/\D/g, "")}`;
           if (seenNames.has(key)) return;
           seenNames.add(key);
           mapped.push({
             id: c.id ?? key,
             name,
-            phone,
+            phone: phones[0],
+            phones,
             initials: name.slice(0, 1).toUpperCase() || "?",
             color: CONTACT_COLOR,
             imageUri: undefined,
@@ -198,9 +379,17 @@ export default function RecipientPickerScreen() {
   }, [params.amount]);
 
   const filteredContacts = useMemo(() => {
-    if (!search) return contacts;
+    const allContacts = getContactsSync().length > contacts.length ? getContactsSync() : contacts;
+    if (!search) return allContacts;
     const q = search.toLowerCase();
-    return contacts.filter((c) => c.name.toLowerCase().includes(q) || c.phone.includes(q));
+    const qDigits = q.replace(/\D/g, '');
+    return allContacts.filter((c) => {
+      if (c.name.toLowerCase().includes(q)) return true;
+      if (qDigits.length === 0) return false;
+      const phoneDigits = c.phone.replace(/\D/g, '');
+      const phoneLocal = phoneDigits.startsWith('250') ? '0' + phoneDigits.slice(3) : phoneDigits;
+      return phoneDigits.includes(qDigits) || phoneLocal.includes(qDigits);
+    });
   }, [search, contacts]);
 
   const filteredMerchants = useMemo(() => {
@@ -223,7 +412,10 @@ export default function RecipientPickerScreen() {
     const exactInContacts = contacts.find((c) => normalizeNum(c.phone) === searchNorm);
     const exactMatch = exactInRecents ?? exactInContacts;
 
-    if (search.length > 0) {
+    // Only show typed input row if it looks like a number or merchant code (not a name)
+    const isNumericInput = /^[\d\s\+\-\.\(\)]+$/.test(search.trim());
+
+    if (search.length > 0 && isNumericInput) {
       if (exactMatch) {
         // Show matched contact/recent instead of raw typed input
         result.push({
@@ -243,21 +435,26 @@ export default function RecipientPickerScreen() {
       result.push({ title: "MOST RECENT", data: recents });
     } else if (search && recents.length > 0) {
       const q = search.toLowerCase();
-      const filteredRecents = recents.filter((r) =>
-        (r.name.toLowerCase().includes(q) || r.phone.includes(q)) && r !== exactMatch
-      );
+      const qDigits = q.replace(/\D/g, '');
+      const filteredRecents = recents.filter((r) => {
+        if (r === exactMatch) return false;
+        if (r.name.toLowerCase().includes(q)) return true;
+        const phoneDigits = r.phone.replace(/\D/g, '');
+        const phoneLocal = phoneDigits.startsWith('250') ? '0' + phoneDigits.slice(3) : phoneDigits;
+        return qDigits.length > 0 && (phoneDigits.includes(qDigits) || phoneLocal.includes(qDigits));
+      });
       if (filteredRecents.length > 0) result.push({ title: "MOST RECENT", data: filteredRecents });
     }
 
     if (filteredContacts.length > 0) {
-      const deduped = exactMatch ? filteredContacts.filter((c) => c !== exactMatch) : filteredContacts;
+      const deduped = exactMatch ? filteredContacts.filter((c) => c.id !== exactMatch.id) : filteredContacts;
       if (deduped.length > 0) result.push({ title: "CONTACTS", data: deduped });
     }
 
     return result;
   }, [filteredContacts, search, recents, contacts]);
 
-  const handleSelect = async (name: string, phone: string, color = "#1A237E", isMerchant = false) => {
+  const handleSelect = async (name: string, phone: string, color = "#1A237E", isMerchant = false, imageUri?: string) => {
     const cleaned = phone.replace(/[\s\-().]/g, '').replace(/[^0-9+]/g, '');
     const isPhone = /^(\+?250)?0(7[2389]\d{7})$/.test(cleaned);
     const isMerchantCode = /^\d{4,8}$/.test(cleaned) && !isPhone;
@@ -278,7 +475,7 @@ export default function RecipientPickerScreen() {
         {
           text: params.actionLabel ?? "Send",
           onPress: async () => {
-            dispatch(addRecent({ id: finalPhone, name: name === phone ? finalPhone : name, phone: finalPhone, initials: name.slice(0, 1).toUpperCase() || "#", color: "#1A237E" }));
+            dispatch(addRecent({ id: finalPhone, name: _isMerchant ? name : (name === phone ? finalPhone : name), phone: finalPhone, initials: _isMerchant ? name.slice(0, 1).toUpperCase() : (name.slice(0, 1).toUpperCase() || "#"), color: "#1A237E", imageUri }));
             let result;
             if (_isMerchant) {
               result = await payBill(finalPhone, params.amount, detectedOperator, selectedSlot);
@@ -339,8 +536,15 @@ export default function RecipientPickerScreen() {
               <View>
                 <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>NEARBY MERCHANT CODES</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.merchantsScroll}>
-                  {filteredMerchants.map((m) => (
-                    <MerchantCard key={m.id} merchant={m} onPress={() => handleSelect(m.merchant_name, m.merchant_code, "#1A237E", true)} />
+                  {filteredMerchants.map((m, i) => (
+                    <MerchantCard key={m.id} merchant={m} index={i} onPress={() => {
+                      const codes = m.all_codes ?? [m.merchant_code];
+                      if (codes.length > 1) {
+                        setPickerMerchant(m);
+                      } else {
+                        handleSelect(m.merchant_name, m.merchant_code, "#1A237E", true);
+                      }
+                    }} />
                   ))}
                 </ScrollView>
               </View>
@@ -349,11 +553,20 @@ export default function RecipientPickerScreen() {
           renderSectionHeader={({ section }) => (
             <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>{section.title}</Text>
           )}
-          renderItem={({ item }) => (
-            <ContactRow
+          renderItem={({ item, index }) => (
+            <AnimatedContactRow
               item={item}
-              onPress={() => handleSelect(item.name, item.phone, item.color, item.id === "manual-merchant")}
+              onPress={() => {
+                const phones = item.phones ?? [item.phone];
+                if (phones.length > 1 && item.id !== "manual-merchant" && item.id !== "manual-input") {
+                  setPickerContact(item);
+                } else {
+                  handleSelect(item.name, item.phone, item.color, item.id === "manual-merchant", item.imageUri);
+                }
+              }}
               colors={colors}
+              query={search}
+              index={index}
             />
           )}
           ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
@@ -376,6 +589,54 @@ export default function RecipientPickerScreen() {
           <Text style={[styles.totalCurrency, { color: colors.mutedForeground }]}>RWF</Text>
         </View>
       </View>
+      {/* Phone Picker Modal */}
+      <PhonePickerModal
+        visible={!!pickerContact}
+        contact={pickerContact}
+        colors={colors}
+        onClose={() => setPickerContact(null)}
+        onSelect={(phone) => {
+          if (pickerContact) {
+            handleSelect(pickerContact.name, phone, pickerContact.color, false, pickerContact.imageUri);
+            setPickerContact(null);
+          }
+        }}
+      />
+
+      {/* Merchant Code Picker Modal */}
+      <Modal visible={!!pickerMerchant} transparent animationType="slide" onRequestClose={() => setPickerMerchant(null)}>
+        <View style={pmStyles.overlay}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setPickerMerchant(null)} />
+          <View style={[pmStyles.sheet, { backgroundColor: colors.card }]}>
+            <Text style={[pmStyles.title, { color: colors.foreground }]}>
+              Select a code for {pickerMerchant?.merchant_name}
+            </Text>
+            <Text style={[pmStyles.subtitle, { color: colors.mutedForeground }]}>
+              This merchant has multiple codes — pick the correct one
+            </Text>
+            {(pickerMerchant?.all_codes ?? []).map((code, i) => (
+              <Pressable
+                key={i}
+                onPress={() => {
+                  handleSelect(pickerMerchant!.merchant_name, code, "#1A237E", true);
+                  setPickerMerchant(null);
+                }}
+                style={({ pressed }) => [pmStyles.phoneRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1, backgroundColor: colors.background }]}
+              >
+                <Ionicons name="storefront-outline" size={22} color={colors.primary} />
+                <View style={pmStyles.phoneInfo}>
+                  <Text style={[pmStyles.phoneNum, { color: colors.foreground }]}>{code}</Text>
+                  <Text style={[pmStyles.carrierName, { color: colors.accent }]}>Merchant Code</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.border} />
+              </Pressable>
+            ))}
+            <Pressable onPress={() => setPickerMerchant(null)} style={[pmStyles.cancelBtn, { borderColor: colors.border }]}>
+              <Text style={[pmStyles.cancelText, { color: colors.destructive }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

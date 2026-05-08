@@ -26,6 +26,7 @@ function RootLayoutNav({ onboardingDone }: { onboardingDone: boolean }) {
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
       <Stack.Screen name="send" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="recipient-picker" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="airtime-picker" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="tap-and-go" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="bill-payment" options={{ animation: "slide_from_right" }} />
     </Stack>

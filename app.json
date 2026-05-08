@@ -6,6 +6,7 @@
     "scheme": "kandapay",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "splash": {
       "backgroundColor": "#1A237E",
       "resizeMode": "contain"

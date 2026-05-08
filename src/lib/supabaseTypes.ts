@@ -38,4 +38,5 @@ export interface MerchantUsageStat {
 
 export interface NearbyMerchantResult extends VerifiedMerchant {
   distance_meters: number;
+  all_codes?: string[]; // grouped codes for same merchant name
 }

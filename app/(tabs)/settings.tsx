@@ -2,9 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useDispatch, useSelector } from "react-redux";
 import { useColors } from "@/hooks/useColors";
+import { RootState } from "@/src/store";
+import { setProfile } from "@/src/store/slices/profileSlice";
 
 const TAB_BAR_HEIGHT = 100;
 
@@ -47,6 +50,8 @@ function Separator() {
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const dispatch = useDispatch();
+  const profile = useSelector((s: RootState) => s.profile);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const [saveTransactions, setSaveTransactions] = useState(true);
   const [autoVerify, setAutoVerify] = useState(true);
@@ -56,6 +61,21 @@ export default function SettingsScreen() {
   const [recentRecipients, setRecentRecipients] = useState(true);
   const [faceId, setFaceId] = useState(true);
   const [notifications, setNotifications] = useState(true);
+  const [editVisible, setEditVisible] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+
+  const openEdit = () => {
+    setEditName(profile.name);
+    setEditPhone(profile.phone);
+    setEditVisible(true);
+  };
+
+  const saveEdit = () => {
+    if (!editPhone.trim()) { Alert.alert("Required", "Please enter your phone number."); return; }
+    dispatch(setProfile({ name: editName.trim(), phone: editPhone.trim() }));
+    setEditVisible(false);
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -63,13 +83,13 @@ export default function SettingsScreen() {
         <Text style={[styles.pageTitle, { color: colors.foreground }]}>Settings</Text>
         <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
           <View style={[styles.profileAvatar, { backgroundColor: colors.primary }]}>
-            <Text style={styles.profileAvatarText}>P</Text>
+            <Text style={styles.profileAvatarText}>{profile.name ? profile.name.slice(0,1).toUpperCase() : "?"}</Text>
           </View>
           <View style={styles.profileInfo}>
-            <Text style={[styles.profileName, { color: colors.foreground }]}>Pacifique Nkusi</Text>
-            <Text style={[styles.profilePhone, { color: colors.mutedForeground }]}>+250 078 XXX XXXX</Text>
+            <Text style={[styles.profileName, { color: colors.foreground }]}>{profile.name || "Tap edit to set your name"}</Text>
+            <Text style={[styles.profilePhone, { color: colors.mutedForeground }]}>{profile.phone || "No phone number set"}</Text>
           </View>
-          <Pressable style={[styles.editBtn, { backgroundColor: colors.muted }]}>
+          <Pressable onPress={openEdit} style={[styles.editBtn, { backgroundColor: colors.muted }]}>
             <Ionicons name="pencil" size={16} color={colors.primary} />
           </Pressable>
         </View>
@@ -123,6 +143,37 @@ export default function SettingsScreen() {
         </Section>
         <Text style={[styles.version, { color: colors.mutedForeground }]}>KandaPay v1.0.0</Text>
       </ScrollView>
+      <Modal visible={editVisible} transparent animationType="fade" onRequestClose={() => setEditVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setEditVisible(false)}>
+          <Pressable style={[styles.editModal, { backgroundColor: colors.card }]} onPress={() => {}}>
+            <Text style={[styles.editModalTitle, { color: colors.foreground }]}>Edit Profile</Text>
+            <TextInput
+              style={[styles.editInput, { color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Your name"
+              placeholderTextColor={colors.mutedForeground}
+              value={editName}
+              onChangeText={setEditName}
+            />
+            <TextInput
+              style={[styles.editInput, { color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Your phone number e.g. 0788123456"
+              placeholderTextColor={colors.mutedForeground}
+              value={editPhone}
+              onChangeText={setEditPhone}
+              keyboardType="phone-pad"
+              autoFocus
+            />
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => setEditVisible(false)} style={[styles.editModalBtn, { borderColor: colors.border }]}>
+                <Text style={[styles.editModalBtnText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={saveEdit} style={[styles.editModalBtn, { backgroundColor: "#1A237E", borderColor: "#1A237E" }]}>
+                <Text style={[styles.editModalBtnText, { color: "#fff" }]}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -158,4 +209,11 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 13 },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 62 },
   version: { textAlign: "center", fontSize: 12, paddingVertical: 8 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+  editModal: { width: 300, borderRadius: 20, padding: 20, gap: 12 },
+  editModalTitle: { fontSize: 16, fontWeight: "700", textAlign: "center", marginBottom: 4 },
+  editInput: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15 },
+  editModalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  editModalBtn: { flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: "center", borderWidth: 1.5 },
+  editModalBtnText: { fontSize: 14, fontWeight: "700" },
 });

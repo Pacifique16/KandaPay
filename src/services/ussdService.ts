@@ -34,5 +34,10 @@ export const checkBalance = (operator: Operator, simSlot = 0) =>
 export const buyAirtime = (amount: string, operator: Operator, simSlot = 0) =>
   executeTransaction({ action: 'buy_airtime', operator, simSlot, params: { amount } });
 
+export const buyAirtimeOther = (phone: string, amount: string, operator: Operator, simSlot = 0) => {
+  const normalized = normalizePhone(phone);
+  return executeTransaction({ action: 'buy_airtime_other', operator, simSlot, params: { phone: normalized, amount } });
+};
+
 export const payBill = (code: string, amount: string, operator: Operator, simSlot = 0) =>
   executeTransaction({ action: 'pay_bill', operator, simSlot, params: { code, amount } });
