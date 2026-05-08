@@ -2,17 +2,18 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import { NumericKeypad } from "@/components/NumericKeypad";
 import { EXPENSE_TAGS, ExpenseTag } from "@/constants/mockData";
 import { useColors } from "@/hooks/useColors";
+import { getCurrentLocation, getNearbyMerchants } from "@/src/lib/merchantIntelligence";
 import { getSimCards, requestUssdPermissions } from "@/src/modules/ussd/UssdBridge";
-import { setSimCards, setDetectedOperator } from "@/src/store/slices/simSlice";
 import { checkBalance } from "@/src/services/ussdService";
 import { RootState } from "@/src/store";
+import { setDetectedOperator, setSimCards } from "@/src/store/slices/simSlice";
 
 const QUICK_ACTIONS = [
   { id: "send", label: "Send Money", icon: "paper-plane-outline", color: "#6C63FF" },
@@ -41,14 +42,15 @@ export default function HomeScreen() {
       dispatch(setSimCards(sims));
       if (sims.length > 0) {
         const name = sims[0].operatorName.toUpperCase();
-        const phone = sims[0].iccId ?? "";
         let operator: "MTN" | "AIRTEL" | "UNKNOWN" = "UNKNOWN";
-        if (name.includes("MTN") || phone.startsWith("078") || phone.startsWith("079")) operator = "MTN";
-        else if (name.includes("AIRTEL") || phone.startsWith("072") || phone.startsWith("073")) operator = "AIRTEL";
-        // fallback: if only one SIM and name is empty, default to MTN (most common in Rwanda)
-        else if (sims.length > 0 && name.length < 3) operator = "MTN";
+        if (name.includes("MTN")) operator = "MTN";
+        else if (name.includes("AIRTEL")) operator = "AIRTEL";
+        else operator = "MTN";
         dispatch(setDetectedOperator(operator));
       }
+      // Pre-warm nearby merchants cache in background silently
+      const loc = await getCurrentLocation();
+      if (loc) getNearbyMerchants(loc.latitude, loc.longitude, 40);
     };
     init();
   }, []);
@@ -66,16 +68,16 @@ export default function HomeScreen() {
     setActiveTags([]);
   }, []);
 
-  const toggleTag = (tag: ExpenseTag) => {
+  const toggleTag = useCallback((tag: ExpenseTag) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setActiveTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
-  };
+  }, []);
 
-  const displayAmount = () => (!amount ? "0" : parseInt(amount, 10).toLocaleString());
+  const displayAmount = useMemo(() => (!amount ? "0" : parseInt(amount, 10).toLocaleString()), [amount]);
   const hasAmount = !!amount && parseFloat(amount) > 0;
   const selectedActionData = QUICK_ACTIONS.find((a) => a.id === selectedAction)!;
 
-  const handlePay = () => {
+  const handlePay = useCallback(() => {
     if (!hasAmount) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
@@ -85,14 +87,14 @@ export default function HomeScreen() {
       pathname: "/recipient-picker",
       params: { amount, action: selectedAction, actionColor: selectedActionData.color, actionLabel: selectedActionData.label },
     });
-  };
+  }, [hasAmount, amount, selectedAction, selectedActionData]);
 
-  const handleBalance = async () => {
+  const handleBalance = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const operator = detectedOperator === "UNKNOWN" ? "MTN" : detectedOperator;
     const result = await checkBalance(operator, selectedSlot);
     Alert.alert("Balance", result.response ?? result.error ?? "No response");
-  };
+  }, [detectedOperator, selectedSlot]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -110,7 +112,7 @@ export default function HomeScreen() {
         </View>
         <View style={styles.amountRow}>
           <Text style={styles.amountDisplay} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.4}>
-            {displayAmount()}
+            {displayAmount}
           </Text>
           <Text style={styles.currencyLabel}>RWF</Text>
         </View>

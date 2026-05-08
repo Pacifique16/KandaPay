@@ -1,20 +1,37 @@
 import { configureStore } from '@reduxjs/toolkit';
+import { persistStore, persistReducer, FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER } from 'redux-persist';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { combineReducers } from 'redux';
 import simReducer from './slices/simSlice';
 import transactionReducer from './slices/transactionSlice';
 import recentsReducer from './slices/recentsSlice';
 
+const persistConfig = {
+  key: 'root',
+  storage: AsyncStorage,
+  whitelist: ['recents'], // only persist recents
+};
+
+const rootReducer = combineReducers({
+  sim: simReducer,
+  transactions: transactionReducer,
+  recents: recentsReducer,
+});
+
+const persistedReducer = persistReducer(persistConfig, rootReducer);
+
 export const store = configureStore({
-  reducer: {
-    sim: simReducer,
-    transactions: transactionReducer,
-    recents: recentsReducer,
-  },
+  reducer: persistedReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      serializableCheck: false,
+      serializableCheck: {
+        ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
+      },
       immutableCheck: false,
     }),
 });
 
-export type RootState = ReturnType<typeof store.getState>;
+export const persistor = persistStore(store);
+
+export type RootState = ReturnType<typeof rootReducer>;
 export type AppDispatch = typeof store.dispatch;

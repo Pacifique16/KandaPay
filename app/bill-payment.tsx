@@ -6,6 +6,7 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleShee
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSelector } from "react-redux";
 import { useColors } from "@/hooks/useColors";
+import { getCurrentLocation, submitMerchantSignal } from "@/src/lib/merchantIntelligence";
 import { payBill } from "@/src/services/ussdService";
 import { RootState } from "@/src/store";
 
@@ -34,9 +35,20 @@ export default function BillPaymentScreen() {
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
-  const params = useLocalSearchParams<{ type: string }>();
+  const params = useLocalSearchParams<{ type: string; merchantCode?: string; merchantName?: string }>();
   const { selectedSlot, detectedOperator } = useSelector((s: RootState) => s.sim);
-  const config = BILL_CONFIGS[params.type ?? ""] ?? BILL_CONFIGS["electricity"];
+
+  // Handle direct merchant code from nearby suggestions
+  const isMerchantDirect = params.type === "merchant" && !!params.merchantCode;
+  const config = isMerchantDirect
+    ? {
+        title: params.merchantName ?? params.merchantCode ?? "Merchant",
+        icon: "storefront-outline" as const,
+        color: "#6C63FF",
+        fields: [{ key: "amount", label: "Amount (RWF)", placeholder: "Enter amount", keyboardType: "numeric" as const }],
+        buttonLabel: "Pay Merchant",
+      }
+    : BILL_CONFIGS[params.type ?? ""] ?? BILL_CONFIGS["electricity"];
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [selectedBouquet, setSelectedBouquet] = useState(0);
   const [bouquetOpen, setBouquetOpen] = useState(false);
@@ -52,17 +64,25 @@ export default function BillPaymentScreen() {
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const amount = fieldValues["amount"] ?? DSTV_BOUQUETS[selectedBouquet].price.toString();
-    const code = fieldValues["meter"] ?? fieldValues["smartcard"] ?? fieldValues["account"] ?? fieldValues["student_id"] ?? "";
+    const code = isMerchantDirect
+      ? params.merchantCode!
+      : fieldValues["meter"] ?? fieldValues["smartcard"] ?? fieldValues["account"] ?? fieldValues["student_id"] ?? "";
     Alert.alert(
       "Confirm Payment",
-      `${config.title} payment\nCode: ${code}\nAmount: RWF ${parseInt(amount).toLocaleString()}\n\nProceed?`,
+      `${config.title} payment\nAmount: RWF ${parseInt(amount).toLocaleString()}\n\nProceed?`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: config.buttonLabel,
           onPress: async () => {
-            const result = await payBill(code, amount, detectedOperator, selectedSlot);
-            Alert.alert(result.success ? "Success" : "Failed", result.response ?? result.error ?? "Unknown");
+            const result = await payBill(code, amount, detectedOperator === 'UNKNOWN' ? 'MTN' : detectedOperator, selectedSlot);
+            if (result.success) {
+              getCurrentLocation().then((loc) => {
+                if (loc) submitMerchantSignal(code, loc.latitude, loc.longitude);
+              });
+            } else {
+              Alert.alert("Failed", result.error ?? "Unknown error");
+            }
             router.replace("/(tabs)");
           },
         },
