@@ -9,6 +9,7 @@ export type CachedContact = {
   phone: string;
   initials: string;
   color: string;
+  imageUri?: string;
 };
 
 let _contacts: CachedContact[] = [];
@@ -67,23 +68,31 @@ async function _refreshContactsInBackground(): Promise<void> {
     const { status } = await Contacts.requestPermissionsAsync();
     if (status !== 'granted') return;
     const { data } = await Contacts.getContactsAsync({
-      fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers],
+      fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers, Contacts.Fields.Image],
       sort: Contacts.SortTypes.FirstName,
     });
-    const COLORS = ['#6C63FF', '#1A237E', '#00C9A7', '#4A47A3', '#F59E0B', '#EC4899'];
     const mapped: CachedContact[] = [];
-    data.forEach((c, i) => {
-      const name = c.name ?? '';
-      (c.phoneNumbers ?? []).forEach((p) => {
-        if (p.number) {
-          mapped.push({
-            id: `${c.id}-${p.id ?? i}`,
-            name,
-            phone: p.number,
-            initials: name.slice(0, 1).toUpperCase() || '?',
-            color: COLORS[mapped.length % COLORS.length],
-          });
-        }
+    const seenNames = new Set<string>();
+    data.forEach((c) => {
+      const name = (c.name ?? '').trim();
+      if (!name || name.length < 2) return;
+      if (/^[\d\s\+\-\(\)]+$/.test(name)) return; // skip contacts where name is just a number
+      const phones = c.phoneNumbers ?? [];
+      if (phones.length === 0) return;
+      // Use only the first phone number per contact
+      const phone = phones[0].number;
+      if (!phone) return;
+      // Skip duplicate names with same number
+      const key = `${name}-${phone.replace(/\D/g, '')}`;
+      if (seenNames.has(key)) return;
+      seenNames.add(key);
+      mapped.push({
+        id: c.id ?? key,
+        name,
+        phone,
+        initials: name.slice(0, 1).toUpperCase() || '?',
+        color: '#1A237E',
+        imageUri: c.image?.uri,
       });
     });
     _contacts = mapped;

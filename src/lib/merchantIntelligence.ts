@@ -21,18 +21,13 @@ let _lastLocation: { latitude: number; longitude: number } | null = null;
 
 export async function initMerchantIntelligence(): Promise<void> {
   try {
-    // Clear stale cache
-    await AsyncStorage.removeItem(MERCHANTS_CACHE_KEY);
+    // Clear all caches to force fresh location and merchant fetch
+    await AsyncStorage.multiRemove([MERCHANTS_CACHE_KEY, LOCATION_CACHE_KEY]);
     _nearbyCacheLoaded = false;
     _nearbyCache = [];
-
-    // Load last known location
-    const cachedLocation = await AsyncStorage.getItem(LOCATION_CACHE_KEY);
-    if (cachedLocation) _lastLocation = JSON.parse(cachedLocation);
-
-    // Fetch fresh merchants NOW (not in background) so cache is ready
-    await refreshNearbyMerchantsInBackground();
+    _lastLocation = null;
   } catch {}
+  await refreshNearbyMerchantsInBackground();
 }
 
 async function refreshNearbyMerchantsInBackground(): Promise<void> {
@@ -48,7 +43,7 @@ async function refreshNearbyMerchantsInBackground(): Promise<void> {
     const { data, error } = await supabase.rpc('get_nearby_merchants', {
       user_lat: loc.latitude,
       user_lng: loc.longitude,
-      radius_meters: 40,
+      radius_meters: 1000,
     });
     if (error) {
       console.warn('[MerchantIntelligence] RPC error:', error);
@@ -69,14 +64,7 @@ async function getFastLocation(): Promise<{ latitude: number; longitude: number 
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return _lastLocation;
-
-    // Try last known position first — instant
-    const last = await Location.getLastKnownPositionAsync();
-    if (last) {
-      return { latitude: last.coords.latitude, longitude: last.coords.longitude };
-    }
-
-    // Fallback: get current with Balanced accuracy (faster than High)
+    // Always get fresh position, don't use last known (it can be very stale)
     const loc = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
@@ -99,7 +87,7 @@ export function getNearbyMerchantsSync(): NearbyMerchantResult[] {
 export async function getNearbyMerchants(
   lat: number,
   lng: number,
-  radiusMeters = 40
+  radiusMeters = 1000
 ): Promise<NearbyMerchantResult[]> {
   // Return cache immediately if available
   if (_nearbyCacheLoaded) return _nearbyCache;
