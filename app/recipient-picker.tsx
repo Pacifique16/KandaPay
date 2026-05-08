@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Platform,
   Pressable,
@@ -30,27 +31,60 @@ import { getContactsSync, isContactsLoaded, setContactsCache, CONTACTS_CACHE_KEY
 
 type PhoneContact = CachedContact;
 
-const COLORS = ["#6C63FF", "#1A237E", "#00C9A7", "#4A47A3", "#F59E0B", "#EC4899"];
+const CONTACT_COLOR = "#1A237E";
 
-function Avatar({ name, color, size = 48 }: { name: string; color?: string; size?: number }) {
+function Avatar({ name, color, size = 48, imageUri, isUnknown }: { name: string; color?: string; size?: number; imageUri?: string; isUnknown?: boolean }) {
   const initials = name.trim().slice(0, 1).toUpperCase() || "?";
+  const badgeSize = size * 0.38;
+
+  if (imageUri) {
+    return (
+      <View style={{ width: size, height: size }}>
+        <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 4, overflow: "hidden" }]}>
+          <Image source={{ uri: imageUri }} style={{ width: size, height: size }} resizeMode="cover" />
+        </View>
+      </View>
+    );
+  }
+
+  if (isUnknown) {
+    return (
+      <View style={{ width: size, height: size }}>
+        <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 4, backgroundColor: "#F1F3F8", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E8ECF4" }]}>
+          <View style={{ position: "relative", width: size * 0.65, height: size * 0.65 }}>
+            <View style={{ width: size * 0.65, height: size * 0.65, borderRadius: size * 0.325, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E8ECF4" }}>
+              <Ionicons name="person" size={size * 0.35} color="#6B7280" />
+            </View>
+            <View style={{ position: "absolute", bottom: -3, left: -3, width: size * 0.28, height: size * 0.28, borderRadius: size * 0.14, backgroundColor: "#00C9A7", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "#fff" }}>
+              <Text style={{ color: "#fff", fontSize: size * 0.14, fontWeight: "800" }}>?</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 4, backgroundColor: color ?? "#1A237E" }]}>
+    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 4, backgroundColor: color ?? "#1A237E", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }]}>
       <Text style={[styles.avatarText, { fontSize: size * 0.38 }]}>{initials}</Text>
     </View>
   );
 }
 
 const ContactRow = React.memo(function ContactRow({ item, onPress, colors }: { item: PhoneContact; onPress: () => void; colors: any }) {
+  // A contact is unknown if its name looks like a phone number or matches the phone field
+  const isUnknown = item.name === item.phone || /^[\d\s\+\-\(\)]+$/.test(item.name);
+  const isMerchantCode = /^\d{4,8}$/.test(item.phone.replace(/[\s\-]/g, '')) && !/^(\+?250)?0(7[2389]\d{7})$/.test(item.phone.replace(/[\s\-]/g, ''));
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.muted : "transparent" }]}
     >
-      <Avatar name={item.initials} color={item.color} size={48} />
+      <Avatar name={item.initials} color={item.color} size={48} imageUri={item.imageUri} isUnknown={isUnknown || isMerchantCode} />
       <View style={styles.rowInfo}>
-        <Text style={[styles.rowName, { color: colors.foreground }]}>{item.name}</Text>
-        <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{item.phone}</Text>
+        <Text style={[styles.rowName, { color: colors.foreground }]}>{isUnknown ? item.phone : item.name}</Text>
+        {!isUnknown && !isMerchantCode && <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{item.phone}</Text>}
+        {isMerchantCode && <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{item.phone}</Text>}
       </View>
       <Ionicons name="chevron-forward" size={16} color={colors.border} />
     </Pressable>
@@ -61,10 +95,8 @@ function MerchantCard({ merchant, onPress }: { merchant: NearbyMerchantResult; o
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.merchantCard, pressed && { opacity: 0.75 }]}>
       <LinearGradient colors={["#1A237E", "#6C63FF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.merchantCardGradient}>
-        <Text style={styles.merchantCardName} numberOfLines={1}>{merchant.merchant_name}</Text>
-        <View style={styles.merchantCodeBadge}>
-          <Text style={styles.merchantCodeText}>{merchant.merchant_code}</Text>
-        </View>
+        <Text style={styles.merchantCardName} numberOfLines={2}>{merchant.merchant_name}</Text>
+        <Text style={styles.merchantCodeText}>{merchant.merchant_code}</Text>
       </LinearGradient>
     </Pressable>
   );
@@ -82,6 +114,19 @@ export default function RecipientPickerScreen() {
   const [contacts, setContacts] = useState<PhoneContact[]>(() => getContactsSync());
   const [loading, setLoading] = useState(() => !isContactsLoaded());
   const [nearbyMerchants, setNearbyMerchants] = useState<NearbyMerchantResult[]>(() => getNearbyMerchantsSync());
+
+  // Sync nearby merchants when cache loads
+  useEffect(() => {
+    const merchants = getNearbyMerchantsSync();
+    console.log('[RecipientPicker] merchants on mount:', merchants.length);
+    if (merchants.length > 0) setNearbyMerchants(merchants);
+    const t = setTimeout(() => {
+      const fresh = getNearbyMerchantsSync();
+      console.log('[RecipientPicker] merchants after 1.5s:', fresh.length);
+      if (fresh.length > 0) setNearbyMerchants(fresh);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, []);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -116,19 +161,25 @@ export default function RecipientPickerScreen() {
           sort: Contacts.SortTypes.FirstName,
         });
         const mapped: PhoneContact[] = [];
-        data.forEach((c, i) => {
-          const name = c.name ?? "";
+        const seenNames = new Set<string>();
+        data.forEach((c) => {
+          const name = (c.name ?? "").trim();
+          if (!name || name.length < 2) return;
+          if (/^[\d\s\+\-\(\)]+$/.test(name)) return;
           const phones = c.phoneNumbers ?? [];
-          phones.forEach((p) => {
-            if (p.number) {
-              mapped.push({
-                id: `${c.id}-${p.id ?? i}`,
-                name,
-                phone: p.number,
-                initials: name.slice(0, 1).toUpperCase() || "?",
-                color: COLORS[mapped.length % COLORS.length],
-              });
-            }
+          if (phones.length === 0) return;
+          const phone = phones[0].number;
+          if (!phone) return;
+          const key = `${name}-${phone.replace(/\D/g, "")}`;
+          if (seenNames.has(key)) return;
+          seenNames.add(key);
+          mapped.push({
+            id: c.id ?? key,
+            name,
+            phone,
+            initials: name.slice(0, 1).toUpperCase() || "?",
+            color: CONTACT_COLOR,
+            imageUri: undefined,
           });
         });
         setContacts(mapped);
@@ -160,41 +211,81 @@ export default function RecipientPickerScreen() {
 
   const sections = useMemo(() => {
     const result: { title: string; data: PhoneContact[] }[] = [];
-    const isPhoneNumber = /^[0-9+\s\-]{6,}$/.test(search);
-    if (isPhoneNumber) {
-      result.push({
-        title: "SEND TO THIS NUMBER",
-        data: [{ id: "manual", name: search, phone: search, initials: "#", color: "#6C63FF" }],
-      });
+    const cleaned = search.replace(/[\s\-]/g, '');
+    const isPhoneNumber = /^(\+?250)?0(7[2389]\d{7})$/.test(cleaned);
+    const normalized = cleaned.startsWith('+250') ? '0' + cleaned.slice(4)
+      : cleaned.startsWith('250') ? '0' + cleaned.slice(3) : cleaned;
+
+    // Check for exact match in recents or contacts by normalizing both sides
+    const normalizeNum = (n: string) => n.replace(/[\s\-().+]/g, '').replace(/^250/, '0').replace(/^\+250/, '0');
+    const searchNorm = normalizeNum(cleaned);
+    const exactInRecents = recents.find((r) => normalizeNum(r.phone) === searchNorm);
+    const exactInContacts = contacts.find((c) => normalizeNum(c.phone) === searchNorm);
+    const exactMatch = exactInRecents ?? exactInContacts;
+
+    if (search.length > 0) {
+      if (exactMatch) {
+        // Show matched contact/recent instead of raw typed input
+        result.push({
+          title: "",
+          data: [exactMatch],
+        });
+      } else {
+        // Show typed input as tappable row
+        result.push({
+          title: "",
+          data: [{ id: "manual-input", name: isPhoneNumber ? normalized : search, phone: isPhoneNumber ? normalized : cleaned, initials: "#", color: "#1A237E", imageUri: undefined }],
+        });
+      }
     }
+
     if (!search && recents.length > 0) {
       result.push({ title: "MOST RECENT", data: recents });
+    } else if (search && recents.length > 0) {
+      const q = search.toLowerCase();
+      const filteredRecents = recents.filter((r) =>
+        (r.name.toLowerCase().includes(q) || r.phone.includes(q)) && r !== exactMatch
+      );
+      if (filteredRecents.length > 0) result.push({ title: "MOST RECENT", data: filteredRecents });
     }
-    if (filteredContacts.length > 0) {
-      result.push({ title: "CONTACTS", data: filteredContacts });
-    }
-    return result;
-  }, [filteredContacts, search, recents]);
 
-  const handleSelect = async (name: string, phone: string, color = "#6C63FF", isMerchant = false) => {
+    if (filteredContacts.length > 0) {
+      const deduped = exactMatch ? filteredContacts.filter((c) => c !== exactMatch) : filteredContacts;
+      if (deduped.length > 0) result.push({ title: "CONTACTS", data: deduped });
+    }
+
+    return result;
+  }, [filteredContacts, search, recents, contacts]);
+
+  const handleSelect = async (name: string, phone: string, color = "#1A237E", isMerchant = false) => {
+    const cleaned = phone.replace(/[\s\-().]/g, '').replace(/[^0-9+]/g, '');
+    const isPhone = /^(\+?250)?0(7[2389]\d{7})$/.test(cleaned);
+    const isMerchantCode = /^\d{4,8}$/.test(cleaned) && !isPhone;
+    const _isMerchant = isMerchant || isMerchantCode;
+    const normalized = cleaned.startsWith('+250') ? '0' + cleaned.slice(4)
+      : cleaned.startsWith('250') ? '0' + cleaned.slice(3) : cleaned;
+    const finalPhone = _isMerchant ? cleaned : normalized;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const amtFormatted = parseInt(params.amount ?? "0", 10).toLocaleString();
+    const displayName = _isMerchant
+      ? finalPhone
+      : (name === phone ? finalPhone : `${name}\n${finalPhone}`);
     Alert.alert(
       "Confirm Payment",
-      `${params.actionLabel ?? "Send"} RWF ${amtFormatted} to ${name === phone ? phone : `${name}\n${phone}`}`,
+      `${params.actionLabel ?? "Send"} RWF ${amtFormatted} to ${displayName}`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: params.actionLabel ?? "Send",
           onPress: async () => {
-            dispatch(addRecent({ id: phone, name: name === phone ? phone : name, phone, initials: name.slice(0, 1).toUpperCase() || "#", color }));
+            dispatch(addRecent({ id: finalPhone, name: name === phone ? finalPhone : name, phone: finalPhone, initials: name.slice(0, 1).toUpperCase() || "#", color: "#1A237E" }));
             let result;
-            if (isMerchant) {
-              result = await payBill(phone, params.amount, detectedOperator, selectedSlot);
+            if (_isMerchant) {
+              result = await payBill(finalPhone, params.amount, detectedOperator, selectedSlot);
             } else if (params.action === "airtime") {
               result = await buyAirtime(params.amount, detectedOperator, selectedSlot);
             } else {
-              result = await sendMoney(phone, params.amount, selectedSlot);
+              result = await sendMoney(finalPhone, params.amount, selectedSlot);
             }
             if (!result.success) Alert.alert("Failed", result.error ?? "Unknown error");
             router.replace("/(tabs)");
@@ -261,7 +352,7 @@ export default function RecipientPickerScreen() {
           renderItem={({ item }) => (
             <ContactRow
               item={item}
-              onPress={() => handleSelect(item.name, item.phone, item.color)}
+              onPress={() => handleSelect(item.name, item.phone, item.color, item.id === "manual-merchant")}
               colors={colors}
             />
           )}
@@ -300,17 +391,18 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16 },
   sectionHeader: { fontSize: 11, fontWeight: "700", letterSpacing: 1.2, paddingTop: 20, paddingBottom: 10 },
   merchantsScroll: { gap: 10, paddingBottom: 4 },
-  merchantCard: { width: 130, borderRadius: 16, overflow: "hidden", elevation: 6 },
-  merchantCardGradient: { padding: 14, paddingTop: 16, minHeight: 90, justifyContent: "space-between" },
-  merchantCardName: { color: "#FFFFFF", fontSize: 13, fontWeight: "700", lineHeight: 17 },
-  merchantCodeBadge: { alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginTop: 10 },
-  merchantCodeText: { color: "rgba(255,255,255,0.95)", fontSize: 12, fontWeight: "700", letterSpacing: 0.5 },
+  merchantCard: { width: 120, borderRadius: 14, overflow: "hidden", elevation: 6 },
+  merchantCardGradient: { padding: 12, minHeight: 65, justifyContent: "space-between" },
+  merchantCardName: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", lineHeight: 16 },
+  merchantCodeText: { color: "rgba(255,255,255,0.75)", fontSize: 11, fontWeight: "600", marginTop: 4 },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 12, gap: 14, borderRadius: 12, paddingHorizontal: 6 },
   rowInfo: { flex: 1, gap: 3 },
   rowName: { fontSize: 15, fontWeight: "600" },
   rowSub: { fontSize: 13 },
   avatar: { alignItems: "center", justifyContent: "center" },
   avatarText: { color: "#FFFFFF", fontWeight: "700" },
+  unknownBadge: { position: "absolute", backgroundColor: "#00C9A7", alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "#fff" },
+  unknownBadgeText: { color: "#fff", fontWeight: "800" },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 68 },
   emptyState: { alignItems: "center", paddingVertical: 60, gap: 12 },
   emptyText: { fontSize: 14 },

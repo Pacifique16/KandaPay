@@ -9,7 +9,7 @@ import { PersistGate } from 'redux-persist/integration/react';
 import { store, persistor } from "@/src/store";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { initMerchantIntelligence } from "@/src/lib/merchantIntelligence";
-import { preloadContactsCache } from "@/src/lib/contactsCache";
+import { preloadContactsCache, invalidateContactsCache } from "@/src/lib/contactsCache";
 
 SplashScreen.preventAutoHideAsync();
 
