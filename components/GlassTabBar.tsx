@@ -2,7 +2,14 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 
@@ -38,7 +45,11 @@ export const GlassTabBar = React.memo(function GlassTabBar({ state, navigation }
   return (
     <View style={[styles.outerWrapper, { paddingBottom: bottomPad + 8 }]}>
       <View style={styles.pillShadow}>
-        <BlurView intensity={85} tint="light" style={styles.blurContainer}>
+        <BlurView
+          intensity={Platform.OS === "ios" ? 60 : 85}
+          tint={Platform.OS === "ios" ? "systemUltraThinMaterial" : "light"}
+          style={styles.blurContainer}
+        >
           <View style={[styles.glassOverlay, { borderColor: colors.border }]}>
             {state.routes.map((route, index) => {
               const tab = TABS.find((t) => t.name === route.name) ?? TABS[0];
@@ -48,6 +59,7 @@ export const GlassTabBar = React.memo(function GlassTabBar({ state, navigation }
                   key={route.key}
                   onPress={() => handlePress(route.name, route.key, index, isFocused)}
                   style={styles.tabItem}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                 >
                   <Animated.View
                     style={[
@@ -64,7 +76,10 @@ export const GlassTabBar = React.memo(function GlassTabBar({ state, navigation }
                     <Text
                       style={[
                         styles.label,
-                        { color: isFocused ? colors.accent : colors.mutedForeground, fontWeight: isFocused ? "600" : "400" },
+                        {
+                          color: isFocused ? colors.accent : colors.mutedForeground,
+                          fontWeight: isFocused ? "600" : "400",
+                        },
                       ]}
                     >
                       {tab.label}
@@ -81,7 +96,13 @@ export const GlassTabBar = React.memo(function GlassTabBar({ state, navigation }
 });
 
 const styles = StyleSheet.create({
-  outerWrapper: { position: "absolute", bottom: 0, left: 16, right: 16, alignItems: "center" },
+  outerWrapper: {
+    position: "absolute",
+    bottom: 0,
+    left: 16,
+    right: 16,
+    alignItems: "center",
+  },
   pillShadow: {
     width: "100%",
     borderRadius: 40,
@@ -91,16 +112,25 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 16,
   },
-  blurContainer: { borderRadius: 40, overflow: "hidden" },
+  blurContainer: {
+    borderRadius: 40,
+    overflow: "hidden",
+  },
   glassOverlay: {
     flexDirection: "row",
     borderRadius: 40,
     borderWidth: 1.5,
     paddingVertical: 8,
     paddingHorizontal: 8,
-    backgroundColor: "rgba(255,255,255,0.72)",
+    backgroundColor: Platform.OS === "ios" ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.72)",
   },
   tabItem: { flex: 1, alignItems: "center" },
-  tabInner: { alignItems: "center", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 28, gap: 2 },
+  tabInner: {
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 28,
+    gap: 2,
+  },
   label: { fontSize: 10, letterSpacing: 0.1 },
 });

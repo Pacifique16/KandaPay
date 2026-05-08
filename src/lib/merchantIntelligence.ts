@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { MerchantLocationSignal, NearbyMerchantResult, VerifiedMerchant } from './supabaseTypes';
 
@@ -20,14 +21,22 @@ let _lastLocation: { latitude: number; longitude: number } | null = null;
 // ─── Init: call this at app startup ─────────────────────────────────────────
 
 export async function initMerchantIntelligence(): Promise<void> {
+  // Load from AsyncStorage cache first for instant display
   try {
-    // Clear all caches to force fresh location and merchant fetch
-    await AsyncStorage.multiRemove([MERCHANTS_CACHE_KEY, LOCATION_CACHE_KEY]);
-    _nearbyCacheLoaded = false;
-    _nearbyCache = [];
-    _lastLocation = null;
+    const [cachedMerchants, cachedLocation] = await Promise.all([
+      AsyncStorage.getItem(MERCHANTS_CACHE_KEY),
+      AsyncStorage.getItem(LOCATION_CACHE_KEY),
+    ]);
+    if (cachedMerchants) {
+      _nearbyCache = JSON.parse(cachedMerchants);
+      _nearbyCacheLoaded = true;
+    }
+    if (cachedLocation) {
+      _lastLocation = JSON.parse(cachedLocation);
+    }
   } catch {}
-  await refreshNearbyMerchantsInBackground();
+  // Always refresh in background with fresh GPS
+  refreshNearbyMerchantsInBackground();
 }
 
 async function refreshNearbyMerchantsInBackground(): Promise<void> {
@@ -49,7 +58,19 @@ async function refreshNearbyMerchantsInBackground(): Promise<void> {
       console.warn('[MerchantIntelligence] RPC error:', error);
       return;
     }
-    _nearbyCache = (data as NearbyMerchantResult[]) ?? [];
+    const raw = (data as NearbyMerchantResult[]) ?? [];
+    // Group multiple codes under same merchant name
+    const grouped = new Map<string, NearbyMerchantResult>();
+    raw.forEach((m) => {
+      const key = m.merchant_name.toLowerCase();
+      if (grouped.has(key)) {
+        const existing = grouped.get(key)!;
+        existing.all_codes = [...(existing.all_codes ?? [existing.merchant_code]), m.merchant_code];
+      } else {
+        grouped.set(key, { ...m, all_codes: [m.merchant_code] });
+      }
+    });
+    _nearbyCache = Array.from(grouped.values());
     _nearbyCacheLoaded = true;
     console.log('[MerchantIntelligence] Loaded', _nearbyCache.length, 'merchants');
     AsyncStorage.setItem(MERCHANTS_CACHE_KEY, JSON.stringify(_nearbyCache));
@@ -62,9 +83,9 @@ async function refreshNearbyMerchantsInBackground(): Promise<void> {
 
 async function getFastLocation(): Promise<{ latitude: number; longitude: number } | null> {
   try {
+    if (Platform.OS === 'web') return _lastLocation;
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return _lastLocation;
-    // Always get fresh position, don't use last known (it can be very stale)
     const loc = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });

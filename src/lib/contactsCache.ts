@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 
 export const CONTACTS_CACHE_KEY = '@kandapay_contacts_cache';
 
@@ -7,6 +7,7 @@ export type CachedContact = {
   id: string;
   name: string;
   phone: string;
+  phones?: string[];
   initials: string;
   color: string;
   imageUri?: string;
@@ -65,7 +66,9 @@ async function _refreshContactsInBackground(): Promise<void> {
   _lastRefresh = Date.now();
   try {
     const Contacts = await import('expo-contacts');
-    const { status } = await Contacts.requestPermissionsAsync();
+    const { status } = Platform.OS === 'android'
+      ? await Contacts.requestPermissionsAsync()
+      : { status: 'granted' };
     if (status !== 'granted') return;
     const { data } = await Contacts.getContactsAsync({
       fields: [Contacts.Fields.Name, Contacts.Fields.PhoneNumbers, Contacts.Fields.Image],
@@ -76,20 +79,18 @@ async function _refreshContactsInBackground(): Promise<void> {
     data.forEach((c) => {
       const name = (c.name ?? '').trim();
       if (!name || name.length < 2) return;
-      if (/^[\d\s\+\-\(\)]+$/.test(name)) return; // skip contacts where name is just a number
+      if (/^[\d\s\+\-\(\)]+$/.test(name)) return;
       const phones = c.phoneNumbers ?? [];
       if (phones.length === 0) return;
-      // Use only the first phone number per contact
-      const phone = phones[0].number;
-      if (!phone) return;
-      // Skip duplicate names with same number
-      const key = `${name}-${phone.replace(/\D/g, '')}`;
+      const key = `${name}-${phones[0].number?.replace(/\D/g, '') ?? ''}`;
       if (seenNames.has(key)) return;
       seenNames.add(key);
+      // Store all phone numbers in the first entry
       mapped.push({
         id: c.id ?? key,
         name,
-        phone,
+        phone: phones[0].number ?? '',
+        phones: phones.map(p => p.number ?? '').filter(Boolean),
         initials: name.slice(0, 1).toUpperCase() || '?',
         color: '#1A237E',
         imageUri: c.image?.uri,

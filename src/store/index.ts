@@ -5,17 +5,19 @@ import { combineReducers } from 'redux';
 import simReducer from './slices/simSlice';
 import transactionReducer from './slices/transactionSlice';
 import recentsReducer from './slices/recentsSlice';
+import profileReducer from './slices/profileSlice';
 
 const persistConfig = {
   key: 'root',
   storage: AsyncStorage,
-  whitelist: ['recents'], // only persist recents
+  whitelist: ['recents', 'profile'],
 };
 
 const rootReducer = combineReducers({
   sim: simReducer,
   transactions: transactionReducer,
   recents: recentsReducer,
+  profile: profileReducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

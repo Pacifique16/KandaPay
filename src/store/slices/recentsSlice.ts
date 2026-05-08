@@ -6,6 +6,7 @@ export interface RecentRecipient {
   phone: string;
   initials: string;
   color: string;
+  imageUri?: string;
 }
 
 interface RecentsState {
