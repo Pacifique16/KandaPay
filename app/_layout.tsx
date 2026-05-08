@@ -5,8 +5,11 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Provider } from "react-redux";
-import { store } from "@/src/store";
+import { PersistGate } from 'redux-persist/integration/react';
+import { store, persistor } from "@/src/store";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { initMerchantIntelligence } from "@/src/lib/merchantIntelligence";
+import { preloadContactsCache } from "@/src/lib/contactsCache";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,7 +37,15 @@ export default function RootLayout() {
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem("onboardingDone").then((v) => setOnboardingDone(!!v));
+    const init = async () => {
+      // Run all preloading in parallel before showing app
+      await Promise.all([
+        AsyncStorage.getItem("onboardingDone").then((v) => setOnboardingDone(!!v)),
+        preloadContactsCache(),
+        initMerchantIntelligence(),
+      ]);
+    };
+    init();
   }, []);
 
   useEffect(() => {
@@ -45,11 +56,13 @@ export default function RootLayout() {
 
   return (
     <Provider store={store}>
-      <SafeAreaProvider>
-        <ErrorBoundary>
-          <RootLayoutNav onboardingDone={onboardingDone} />
-        </ErrorBoundary>
-      </SafeAreaProvider>
+      <PersistGate persistor={persistor}>
+        <SafeAreaProvider>
+          <ErrorBoundary>
+            <RootLayoutNav onboardingDone={onboardingDone} />
+          </ErrorBoundary>
+        </SafeAreaProvider>
+      </PersistGate>
     </Provider>
   );
 }

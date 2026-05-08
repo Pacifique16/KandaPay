@@ -7,8 +7,8 @@ export async function executeTransaction(payload: {
   simSlot?: number;
   params?: Record<string, string>;
 }) {
-  const { action, operator, simSlot = 0, params = {} } = payload;
-  if (operator === 'UNKNOWN') return { success: false, error: 'Could not detect operator.' };
+  const { action, operator: rawOperator, simSlot = 0, params = {} } = payload;
+  const operator = rawOperator === 'UNKNOWN' ? 'MTN' : rawOperator;
   const ussdCode = buildUssdCode(operator, action, params);
   console.log(`[KandaPay] Dialing: ${ussdCode} on SIM${simSlot + 1} (${operator})`);
   return dialUssd(ussdCode, simSlot);

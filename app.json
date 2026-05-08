@@ -24,6 +24,7 @@
       "expo-router",
       "expo-font",
       "expo-contacts",
+      "expo-location",
       [
         "react-native-permissions",
         {
@@ -31,7 +32,9 @@
             "CALL_PHONE",
             "READ_PHONE_STATE",
             "READ_PHONE_NUMBERS",
-            "READ_CONTACTS"
+            "READ_CONTACTS",
+            "ACCESS_FINE_LOCATION",
+            "ACCESS_COARSE_LOCATION"
           ]
         }
       ]

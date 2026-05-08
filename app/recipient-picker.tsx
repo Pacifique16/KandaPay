@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as Contacts from "expo-contacts";
 import * as Haptics from "expo-haptics";
@@ -21,31 +20,17 @@ import {
 import { check, request, PERMISSIONS, RESULTS } from "react-native-permissions";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
-import { NearbyMerchant, NEARBY_MERCHANTS } from "@/constants/mockData";
 import { useColors } from "@/hooks/useColors";
-import { buyAirtime, sendMoney } from "@/src/services/ussdService";
+import { buyAirtime, sendMoney, payBill } from "@/src/services/ussdService";
 import { RootState } from "@/src/store";
 import { addRecent } from "@/src/store/slices/recentsSlice";
+import { getNearbyMerchantsSync } from "@/src/lib/merchantIntelligence";
+import { NearbyMerchantResult } from "@/src/lib/supabaseTypes";
+import { getContactsSync, isContactsLoaded, setContactsCache, CONTACTS_CACHE_KEY, CachedContact } from "@/src/lib/contactsCache";
 
-type PhoneContact = {
-  id: string;
-  name: string;
-  phone: string;
-  initials: string;
-  color: string;
-};
+type PhoneContact = CachedContact;
 
 const COLORS = ["#6C63FF", "#1A237E", "#00C9A7", "#4A47A3", "#F59E0B", "#EC4899"];
-
-const CONTACTS_CACHE_KEY = "@kandapay_contacts_cache";
-
-// Module-level cache so contacts don't reload within the same JS session
-let cachedContacts: PhoneContact[] = [];
-let contactsLoaded = false;
-
-function extractCode(fullCode: string): string {
-  return fullCode.split("*").pop()?.replace("#", "") ?? fullCode;
-}
 
 function Avatar({ name, color, size = 48 }: { name: string; color?: string; size?: number }) {
   const initials = name.trim().slice(0, 1).toUpperCase() || "?";
@@ -56,13 +41,29 @@ function Avatar({ name, color, size = 48 }: { name: string; color?: string; size
   );
 }
 
-function MerchantCard({ merchant, onPress }: { merchant: NearbyMerchant; onPress: () => void }) {
+const ContactRow = React.memo(function ContactRow({ item, onPress, colors }: { item: PhoneContact; onPress: () => void; colors: any }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.muted : "transparent" }]}
+    >
+      <Avatar name={item.initials} color={item.color} size={48} />
+      <View style={styles.rowInfo}>
+        <Text style={[styles.rowName, { color: colors.foreground }]}>{item.name}</Text>
+        <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{item.phone}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.border} />
+    </Pressable>
+  );
+});
+
+function MerchantCard({ merchant, onPress }: { merchant: NearbyMerchantResult; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.merchantCard, pressed && { opacity: 0.75 }]}>
       <LinearGradient colors={["#1A237E", "#6C63FF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.merchantCardGradient}>
-        <Text style={styles.merchantCardName} numberOfLines={1}>{merchant.name}</Text>
+        <Text style={styles.merchantCardName} numberOfLines={1}>{merchant.merchant_name}</Text>
         <View style={styles.merchantCodeBadge}>
-          <Text style={styles.merchantCodeText}>{extractCode(merchant.code)}</Text>
+          <Text style={styles.merchantCodeText}>{merchant.merchant_code}</Text>
         </View>
       </LinearGradient>
     </Pressable>
@@ -78,27 +79,23 @@ export default function RecipientPickerScreen() {
   const recents = useSelector((s: RootState) => s.recents.list);
 
   const [search, setSearch] = useState("");
-  const [contacts, setContacts] = useState<PhoneContact[]>(cachedContacts);
-  const [loading, setLoading] = useState(!contactsLoaded);
-
+  const [contacts, setContacts] = useState<PhoneContact[]>(() => getContactsSync());
+  const [loading, setLoading] = useState(() => !isContactsLoaded());
+  const [nearbyMerchants, setNearbyMerchants] = useState<NearbyMerchantResult[]>(() => getNearbyMerchantsSync());
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
   useEffect(() => {
-    if (contactsLoaded) return;
+    // If preloader already loaded contacts, use them immediately
+    const synced = getContactsSync();
+    if (synced.length > 0) {
+      setContacts(synced);
+      setLoading(false);
+      return;
+    }
+    // No cache at all — fetch from device
     (async () => {
       try {
-        // Try loading from AsyncStorage first
-        const cached = await AsyncStorage.getItem(CONTACTS_CACHE_KEY);
-        if (cached) {
-          const parsed = JSON.parse(cached) as PhoneContact[];
-          cachedContacts = parsed;
-          contactsLoaded = true;
-          setContacts(parsed);
-          setLoading(false);
-          return;
-        }
-        // No cache — check/request permission then fetch
         const permission = PERMISSIONS.ANDROID.READ_CONTACTS;
         let status = await check(permission);
         if (status === RESULTS.DENIED) status = await request(permission);
@@ -134,10 +131,8 @@ export default function RecipientPickerScreen() {
             }
           });
         });
-        cachedContacts = mapped;
-        contactsLoaded = true;
         setContacts(mapped);
-        await AsyncStorage.setItem(CONTACTS_CACHE_KEY, JSON.stringify(mapped));
+        setContactsCache(mapped);
       } catch (e: any) {
         Alert.alert("Error", e.message ?? "Failed to load contacts");
       } finally {
@@ -158,10 +153,10 @@ export default function RecipientPickerScreen() {
   }, [search, contacts]);
 
   const filteredMerchants = useMemo(() => {
-    if (!search) return NEARBY_MERCHANTS;
+    if (!search) return nearbyMerchants;
     const q = search.toLowerCase();
-    return NEARBY_MERCHANTS.filter((m) => m.name.toLowerCase().includes(q) || m.code.includes(q));
-  }, [search]);
+    return nearbyMerchants.filter((m) => m.merchant_name.toLowerCase().includes(q) || m.merchant_code.includes(q));
+  }, [search, nearbyMerchants]);
 
   const sections = useMemo(() => {
     const result: { title: string; data: PhoneContact[] }[] = [];
@@ -181,7 +176,7 @@ export default function RecipientPickerScreen() {
     return result;
   }, [filteredContacts, search, recents]);
 
-  const handleSelect = async (name: string, phone: string, color = "#6C63FF") => {
+  const handleSelect = async (name: string, phone: string, color = "#6C63FF", isMerchant = false) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const amtFormatted = parseInt(params.amount ?? "0", 10).toLocaleString();
     Alert.alert(
@@ -192,22 +187,16 @@ export default function RecipientPickerScreen() {
         {
           text: params.actionLabel ?? "Send",
           onPress: async () => {
-            dispatch(addRecent({
-              id: phone,
-              name: name === phone ? phone : name,
-              phone,
-              initials: name.slice(0, 1).toUpperCase() || "#",
-              color,
-            }));
+            dispatch(addRecent({ id: phone, name: name === phone ? phone : name, phone, initials: name.slice(0, 1).toUpperCase() || "#", color }));
             let result;
-            if (params.action === "airtime") {
+            if (isMerchant) {
+              result = await payBill(phone, params.amount, detectedOperator, selectedSlot);
+            } else if (params.action === "airtime") {
               result = await buyAirtime(params.amount, detectedOperator, selectedSlot);
             } else {
               result = await sendMoney(phone, params.amount, selectedSlot);
             }
-            if (!result.success) {
-              Alert.alert("Failed", result.error ?? "Unknown error");
-            }
+            if (!result.success) Alert.alert("Failed", result.error ?? "Unknown error");
             router.replace("/(tabs)");
           },
         },
@@ -260,7 +249,7 @@ export default function RecipientPickerScreen() {
                 <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>NEARBY MERCHANT CODES</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.merchantsScroll}>
                   {filteredMerchants.map((m) => (
-                    <MerchantCard key={m.id} merchant={m} onPress={() => handleSelect(m.name, extractCode(m.code), "#1A237E")} />
+                    <MerchantCard key={m.id} merchant={m} onPress={() => handleSelect(m.merchant_name, m.merchant_code, "#1A237E", true)} />
                   ))}
                 </ScrollView>
               </View>
@@ -270,17 +259,11 @@ export default function RecipientPickerScreen() {
             <Text style={[styles.sectionHeader, { color: colors.mutedForeground }]}>{section.title}</Text>
           )}
           renderItem={({ item }) => (
-            <Pressable
+            <ContactRow
+              item={item}
               onPress={() => handleSelect(item.name, item.phone, item.color)}
-              style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.muted : "transparent" }]}
-            >
-              <Avatar name={item.initials} color={item.color} size={48} />
-              <View style={styles.rowInfo}>
-                <Text style={[styles.rowName, { color: colors.foreground }]}>{item.name}</Text>
-                <Text style={[styles.rowSub, { color: colors.mutedForeground }]}>{item.phone}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.border} />
-            </Pressable>
+              colors={colors}
+            />
           )}
           ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
           ListEmptyComponent={
