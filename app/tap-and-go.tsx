@@ -192,10 +192,19 @@ export default function TapAndGoScreen() {
             keyExtractor={(item) => item.id}
             snapToInterval={CARD_WIDTH + 16}
             decelerationRate="fast"
-            contentContainerStyle={{ paddingHorizontal: 16, gap: 16 }}
+            contentContainerStyle={cards.length === 0 ? { flex: 1 } : { paddingHorizontal: 16, gap: 16 }}
             onScroll={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / (CARD_WIDTH + 16)))}
             scrollEventThrottle={16}
             renderItem={({ item, index }) => <TapCard card={item} index={index} onEdit={() => openEdit(item)} onDelete={() => handleDelete(item)} />}
+            ListEmptyComponent={
+              <View style={{ width: SCREEN_WIDTH, alignItems: "center", justifyContent: "center" }}>
+                <Pressable onPress={openRegister} style={[styles.emptyCard, { width: CARD_WIDTH }]}>
+                  <Ionicons name="card" size={36} color="#388E3C" />
+                  <Text style={styles.emptyCardTitle}>Register a Card</Text>
+                  <Text style={styles.emptyCardSub}>Max 5 cards</Text>
+                </Pressable>
+              </View>
+            }
           />
           <View style={styles.dots}>
             {cards.map((_, i) => (
@@ -413,6 +422,9 @@ const styles = StyleSheet.create({
   cardBalance: { color: "#fff", fontSize: 20, fontWeight: "800" },
   cardDecor1: { position: "absolute", width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(255,255,255,0.07)", top: -30, right: -20 },
   cardDecor2: { position: "absolute", width: 80, height: 80, borderRadius: 40, backgroundColor: "rgba(255,255,255,0.05)", bottom: 20, right: 60 },
+  emptyCard: { height: 190, borderRadius: 24, borderWidth: 2, borderStyle: "dashed", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#F1F8F1", borderColor: "#A5D6A7" },
+  emptyCardTitle: { fontSize: 16, fontWeight: "700", color: "#2E7D32" },
+  emptyCardSub: { fontSize: 13, color: "#66BB6A" },
   dots: { flexDirection: "row", justifyContent: "center", gap: 6 },
   dot: { height: 8, borderRadius: 4 },
   sectionTitle: { fontSize: 16, fontWeight: "700", paddingHorizontal: 20 },
