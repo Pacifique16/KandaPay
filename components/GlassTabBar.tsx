@@ -16,7 +16,7 @@ import { useColors } from "@/hooks/useColors";
 const TABS = [
   { name: "index", label: "Home", icon: "home", iconOutline: "home-outline" },
   { name: "reports", label: "Reports", icon: "bar-chart", iconOutline: "bar-chart-outline" },
-  { name: "transport", label: "Pay Bills", icon: "card", iconOutline: "card-outline" },
+  { name: "bills", label: "Pay Bills", icon: "card", iconOutline: "card-outline" },
   { name: "settings", label: "Settings", icon: "settings", iconOutline: "settings-outline" },
 ] as const;
 

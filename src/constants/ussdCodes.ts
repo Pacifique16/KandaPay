@@ -7,6 +7,7 @@ export const USSD_CODES: Record<string, Record<string, string>> = {
     buy_airtime: '*182*2*1*1*1*{amount}#',
     buy_airtime_other: '*182*2*1*1*2*{phone}*{amount}#',
     pay_bill: '*182*8*1*{code}*{amount}#',
+    electricity: '*182*2*2*1*{meter}#',
     mini_statement: '*182*6*2#',
   },
   AIRTEL: {
@@ -15,6 +16,7 @@ export const USSD_CODES: Record<string, Record<string, string>> = {
     buy_airtime: '*185*2*1*{amount}#',
     buy_airtime_other: '*185*2*2*{phone}*{amount}#',
     pay_bill: '*185*9*{code}*{amount}#',
+    electricity: '*182*2*21*{meter}#',
     mini_statement: '*185*6#',
   },
 };

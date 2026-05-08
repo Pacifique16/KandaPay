@@ -41,3 +41,6 @@ export const buyAirtimeOther = (phone: string, amount: string, operator: Operato
 
 export const payBill = (code: string, amount: string, operator: Operator, simSlot = 0) =>
   executeTransaction({ action: 'pay_bill', operator, simSlot, params: { code, amount } });
+
+export const payElectricity = (meter: string, operator: Operator, simSlot = 0) =>
+  executeTransaction({ action: 'electricity', operator, simSlot, params: { meter } });

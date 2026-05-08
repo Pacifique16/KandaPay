@@ -168,20 +168,52 @@ export default function AirtimePickerScreen() {
     });
   }, [search, contacts]);
 
+  const isPhoneNumber = (s: string) => /^0[0-9]{6,9}$/.test(s.replace(/\s/g, ''));
+
+  const exactMatch = useMemo(() => {
+    if (!search) return undefined;
+    const cleaned = search.replace(/[\s-]/g, '');
+    const searchNorm = cleaned.startsWith('250') ? '0' + cleaned.slice(3) : cleaned;
+    return filteredContacts.find((c) => {
+      const phoneDigits = c.phone.replace(/\D/g, '');
+      const phoneLocal = phoneDigits.startsWith('250') ? '0' + phoneDigits.slice(3) : phoneDigits;
+      return phoneDigits === searchNorm || phoneLocal === searchNorm;
+    });
+  }, [search, filteredContacts]);
+
+  const typedEntry = useMemo<PhoneContact | null>(() => {
+    if (!search || exactMatch) return null;
+    const cleaned = search.replace(/[\s-]/g, '');
+    if (!isPhoneNumber(cleaned)) return null;
+    return { id: '__typed__', name: cleaned, phone: cleaned, phones: [cleaned], initials: '#', color: '#555', imageUri: undefined };
+  }, [search, exactMatch]);
+
   const sections = useMemo(() => {
-    const result: { title: string; data: PhoneContact[]; isMe?: boolean }[] = [];
+    const result: { title: string; data: PhoneContact[]; isMe?: boolean; isTyped?: boolean }[] = [];
+
+    if (typedEntry) {
+      result.push({ title: "BUY FOR", data: [typedEntry], isTyped: true });
+    }
 
     // Always show "Me" at top when not searching
     if (!search && meContact) {
       result.push({ title: "MY NUMBER", data: [meContact], isMe: true });
     }
 
-    if (filteredContacts.length > 0) {
-      result.push({ title: "CONTACTS", data: filteredContacts });
+    const deduped = exactMatch
+      ? filteredContacts.filter((c) => c.id !== exactMatch.id)
+      : filteredContacts;
+
+    if (exactMatch) {
+      result.push({ title: "BEST MATCH", data: [exactMatch] });
+    }
+
+    if (deduped.length > 0) {
+      result.push({ title: "CONTACTS", data: deduped });
     }
 
     return result;
-  }, [filteredContacts, search, meContact]);
+  }, [filteredContacts, search, meContact, typedEntry, exactMatch]);
 
   const handleSelect = async (name: string, phone: string, isMe = false) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -189,8 +221,8 @@ export default function AirtimePickerScreen() {
     const displayName = isMe ? "your number" : name;
 
     Alert.alert(
-      "Confirm Airtime",
-      `Buy RWF ${amtFormatted} airtime for ${displayName}`,
+      "Buy Airtime",
+      `Buy RWF ${amtFormatted} airtime for ${displayName}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -254,7 +286,7 @@ export default function AirtimePickerScreen() {
               item={item}
               onPress={() => handleSelect(item.name, item.phone, (section as any).isMe)}
               colors={colors}
-              query={search}
+              query={(section as any).isTyped ? '' : search}
               index={index}
               isMe={(section as any).isMe}
             />

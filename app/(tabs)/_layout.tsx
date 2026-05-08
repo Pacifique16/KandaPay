@@ -14,7 +14,7 @@ function ClassicTabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "Home" }} />
       <Tabs.Screen name="reports" options={{ title: "Reports" }} />
-      <Tabs.Screen name="transport" options={{ title: "Pay Bills" }} />
+      <Tabs.Screen name="bills" options={{ title: "Pay Bills" }} />
       <Tabs.Screen name="settings" options={{ title: "Settings" }} />
     </Tabs>
   );
@@ -36,7 +36,7 @@ export default function TabLayout() {
             <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
             <Label>Reports</Label>
           </NativeTabs.Trigger>
-          <NativeTabs.Trigger name="transport">
+          <NativeTabs.Trigger name="bills">
             <Icon sf={{ default: "creditcard", selected: "creditcard.fill" }} />
             <Label>Pay Bills</Label>
           </NativeTabs.Trigger>

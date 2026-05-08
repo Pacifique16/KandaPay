@@ -7,20 +7,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSelector } from "react-redux";
 import { useColors } from "@/hooks/useColors";
 import { getCurrentLocation, submitMerchantSignal } from "@/src/lib/merchantIntelligence";
-import { payBill } from "@/src/services/ussdService";
+import { payBill, payElectricity } from "@/src/services/ussdService";
 import { RootState } from "@/src/store";
 
 type FieldConfig = { key: string; label: string; placeholder: string; keyboardType?: "default" | "numeric" | "phone-pad" };
 type BillConfig = { title: string; icon: string; color: string; fields: FieldConfig[]; hasBouquet?: boolean; buttonLabel: string };
 
 const BILL_CONFIGS: Record<string, BillConfig> = {
-  electricity: { title: "Electricity", icon: "flash", color: "#6C63FF", fields: [{ key: "meter", label: "Meter Number", placeholder: "Enter meter number" }, { key: "amount", label: "Amount (RWF)", placeholder: "e.g. 500", keyboardType: "numeric" }], buttonLabel: "Pay Bill" },
-  startimes: { title: "Startimes", icon: "tv", color: "#00C9A7", fields: [{ key: "smartcard", label: "Smartcard Number", placeholder: "Enter smartcard number" }, { key: "amount", label: "Amount (RWF)", placeholder: "e.g. 500", keyboardType: "numeric" }], buttonLabel: "Pay Bill" },
+  electricity: { title: "Electricity", icon: "flash", color: "#1A237E", fields: [{ key: "meter", label: "Meter Number", placeholder: "Enter meter number" }], buttonLabel: "Pay Bill" },
+  startimes: { title: "Startimes", icon: "tv", color: "#1A237E", fields: [{ key: "smartcard", label: "Smartcard Number", placeholder: "Enter smartcard number" }, { key: "amount", label: "Amount (RWF)", placeholder: "e.g. 500", keyboardType: "numeric" }], buttonLabel: "Pay Bill" },
   dstv: { title: "DSTV", icon: "tv", color: "#1A237E", fields: [{ key: "smartcard", label: "Smartcard Number", placeholder: "Enter smartcard number" }], hasBouquet: true, buttonLabel: "Pay Bill" },
-  water: { title: "Water", icon: "water", color: "#4A47A3", fields: [{ key: "account", label: "Account Number", placeholder: "Enter account number" }], buttonLabel: "Proceed" },
-  irembo: { title: "IREMBO", icon: "globe-outline", color: "#00C9A7", fields: [{ key: "account", label: "Account Number", placeholder: "Enter account number" }], buttonLabel: "Proceed" },
+  water: { title: "Water", icon: "water", color: "#1A237E", fields: [{ key: "account", label: "Account Number", placeholder: "Enter account number" }], buttonLabel: "Continue" },
+  irembo: { title: "IREMBO", icon: "globe-outline", color: "#1A237E", fields: [{ key: "account", label: "Account Number", placeholder: "Enter account number" }], buttonLabel: "Continue" },
   "canal-plus": { title: "Canal Plus", icon: "play-circle", color: "#1A237E", fields: [{ key: "smartcard", label: "Smartcard Number", placeholder: "Enter smartcard number" }, { key: "amount", label: "Amount (RWF)", placeholder: "e.g. 5000", keyboardType: "numeric" }], buttonLabel: "Pay Bill" },
-  "school-fees": { title: "School Fees", icon: "school", color: "#4A47A3", fields: [{ key: "student_id", label: "Student ID", placeholder: "Enter student ID" }, { key: "school_id", label: "School ID", placeholder: "Enter school ID" }], buttonLabel: "Proceed" },
+  "school-fees": { title: "School Fees", icon: "school", color: "#1A237E", fields: [{ key: "student_id", label: "Student ID", placeholder: "Enter student ID" }, { key: "school_id", label: "School ID", placeholder: "Enter school ID" }], buttonLabel: "Continue" },
 };
 
 const DSTV_BOUQUETS = [
@@ -75,7 +75,12 @@ export default function BillPaymentScreen() {
         {
           text: config.buttonLabel,
           onPress: async () => {
-            const result = await payBill(code, amount, detectedOperator === 'UNKNOWN' ? 'MTN' : detectedOperator, selectedSlot);
+            let result;
+            if (params.type === 'electricity') {
+              result = await payElectricity(fieldValues['meter'] ?? '', detectedOperator === 'UNKNOWN' ? 'MTN' : detectedOperator, selectedSlot);
+            } else {
+              result = await payBill(code, amount, detectedOperator === 'UNKNOWN' ? 'MTN' : detectedOperator, selectedSlot);
+            }
             if (result.success) {
               getCurrentLocation().then((loc) => {
                 if (loc) submitMerchantSignal(code, loc.latitude, loc.longitude);
@@ -98,9 +103,6 @@ export default function BillPaymentScreen() {
             <Ionicons name="chevron-back" size={20} color={colors.foreground} />
           </Pressable>
           <View style={styles.headerCenter}>
-            <View style={[styles.headerIcon, { backgroundColor: config.color + "18" }]}>
-              <Ionicons name={config.icon as any} size={18} color={config.color} />
-            </View>
             <Text style={[styles.headerTitle, { color: colors.primary }]}>{config.title}</Text>
           </View>
           <View style={{ width: 38 }} />
@@ -138,9 +140,8 @@ export default function BillPaymentScreen() {
           </View>
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: bottomPad + 16, borderTopColor: colors.border, backgroundColor: colors.background }]}>
-          <Pressable onPress={handleSubmit} style={({ pressed }) => [styles.submitBtn, { backgroundColor: config.color, opacity: pressed ? 0.82 : 1 }]}>
+          <Pressable onPress={handleSubmit} style={({ pressed }) => [styles.submitBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 }]}>
             <Text style={styles.submitBtnText}>{config.buttonLabel}</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
           </Pressable>
         </View>
       </View>

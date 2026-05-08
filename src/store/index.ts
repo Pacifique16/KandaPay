@@ -6,11 +6,13 @@ import simReducer from './slices/simSlice';
 import transactionReducer from './slices/transactionSlice';
 import recentsReducer from './slices/recentsSlice';
 import profileReducer from './slices/profileSlice';
+import tapGoReducer from './slices/tapGoSlice';
 
 const persistConfig = {
   key: 'root',
+  version: 2,
   storage: AsyncStorage,
-  whitelist: ['recents', 'profile'],
+  whitelist: ['recents', 'profile', 'tapGo'],
 };
 
 const rootReducer = combineReducers({
@@ -18,6 +20,7 @@ const rootReducer = combineReducers({
   transactions: transactionReducer,
   recents: recentsReducer,
   profile: profileReducer,
+  tapGo: tapGoReducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);
