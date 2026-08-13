@@ -45,7 +45,7 @@ KandaPay/
 ```
 
 ## How USSD dialing works
-1. User taps action (e.g. "Send Money")
+1. User taps action (e.g. "Send Money, Pay bill")
 2. App builds USSD string from template: `*182*1*1*{phone}*{amount}#`
 3. Native module calls `TelephonyManager.sendUssdRequest()`
 4. USSD response is returned and displayed
