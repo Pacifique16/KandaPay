@@ -1,6 +1,6 @@
 # KandaPay — Smart USSD Management System
 
-A React Native app that simplifies mobile money operations for MTN and Airtel users in Rwanda.
+A React Native App that simplifies mobile money operations for MTN and Airtel users in Rwanda.
 
 ## Features
 - Send money (MTN MoMo & Airtel Money)
